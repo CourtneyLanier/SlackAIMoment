@@ -1,0 +1,3 @@
+pandas
+slack_sdk
+openpyxl
