@@ -4,38 +4,59 @@ import os
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-# Load schedule
+# Load token
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+client = WebClient(token=SLACK_BOT_TOKEN)
+
+# Load presenter schedule
 df = pd.read_excel("AI Moment Schedule.xlsx")
 
-# Get today and next Monday
+# Check if today is Thursday
 today = datetime.today().date()
-next_monday = today + timedelta(days=(7 - today.weekday())) if today.weekday() == 3 else None  # Only if today is Thursday
-
-if next_monday:
-    presenter_row = df[df['Date'] == pd.Timestamp(next_monday)]
-    if not presenter_row.empty:
-        presenter_name = presenter_row.iloc[0]['Presenter']
-        slack_users = {
-            "Julie": "@julie",
-            "Dana": "@dana",
-            "Donna Lynn": "@donnalynn",
-            "Bailey": "@bailey",
-            "Brian": "@brian",
-            # Add others as needed
-        }
-        message = f"Hi {presenter_name}, just a reminder that you're up to share in Monday's AI Moment!"
-        slack_user = slack_users.get(presenter_name, None)
-
-        if slack_user:
-            client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
-            try:
-                response = client.chat_postMessage(channel=slack_user, text=message)
-                print("Message sent:", response["ts"])
-            except SlackApiError as e:
-                print("Slack API Error:", e.response["error"])
-        else:
-            print(f"No Slack username found for {presenter_name}")
-    else:
-        print("No presenter scheduled for next Monday.")
-else:
+if today.weekday() != 3:
     print("Today is not Thursday. Exiting.")
+    exit()
+
+# Find the upcoming Monday
+next_monday = today + timedelta(days=(7 - today.weekday()))  # 0=Monday, 3=Thursday
+
+# Find the presenter for that Monday
+row = df[df["Date"] == pd.Timestamp(next_monday)]
+if row.empty:
+    print(f"No presenter found for {next_monday}")
+    exit()
+
+presenter = row.iloc[0]["Presenter"]
+
+# Map presenter names to Slack usernames (update as needed)
+slack_users = {
+    "Julie": "@julieh",
+    "Dana": "@Dana",
+    "Donna Lynn": "@DonnaLynn",
+    "Bailey": "@Bailey Dawson",
+    "Brian": "@Brian Huang"
+}
+
+# Your Slack handle to send log message to
+admin_user = "@Courtney"
+
+# Compose and send the reminder
+presenter_handle = slack_users.get(presenter)
+reminder_msg = f"👋 Hi {presenter}, just a friendly reminder that you're up to share in Monday’s AI Moment on {next_monday.strftime('%B %d')}."
+
+if presenter_handle:
+    try:
+        # Send reminder to presenter
+        client.chat_postMessage(channel=presenter_handle, text=reminder_msg)
+
+        # Log message to you
+        log_msg = f"✅ Reminder sent to {presenter} for {next_monday.strftime('%Y-%m-%d')}."
+        client.chat_postMessage(channel=admin_user, text=log_msg)
+
+    except SlackApiError as e:
+        print("Slack API Error:", e.response["error"])
+else:
+    # If user not found, notify you
+    error_msg = f"⚠️ Could not find Slack handle for presenter: {presenter}"
+    client.chat_postMessage(channel=admin_user, text=error_msg)
+    print(error_msg)
